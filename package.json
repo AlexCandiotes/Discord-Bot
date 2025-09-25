@@ -1,0 +1,14 @@
+{
+  "name": "discord-anime-card-bot",
+  "version": "1.0.0",
+  "description": "A Discord bot for anime card collection",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node src/bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.0.0",
+    "mysql2": "^3.0.0",
+    "dotenv": "^16.0.0"
+  }
+}
