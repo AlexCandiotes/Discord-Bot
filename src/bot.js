@@ -23,7 +23,7 @@ client.on('messageCreate', async message => {
     if (message.content.startsWith('!dropcard')) {
         await dropCard.execute(message);
     }
-    if (message.content.startsWith('!collection')) {
+    if (message.content.startsWith('!viewDroppedCards')) {
         await viewDroppedCards.execute(message);
     }
 });
