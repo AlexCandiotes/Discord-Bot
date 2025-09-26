@@ -13,25 +13,9 @@ async function addCard(card) {
 }
 
 addCard({
-    name: "Trailblazer Male",
-    series: "Honkai: Star Rail",
-    image: "https://raw.githubusercontent.com/yourusername/yourrepo/main/images/TrailblazerMale.jpg",
-    description: "The protagonist who travels across worlds on the Astral Express.",
-    rarity: "R"
-});
-
-addCard({
-    name: "Trailblazer Female",
-    series: "Honkai: Star Rail",
-    image: "https://raw.githubusercontent.com/yourusername/yourrepo/main/images/TrailblazerFemale.jpg",
-    description: "The female protagonist who travels across worlds on the Astral Express.",
-    rarity: "R"
-});
-
-addCard({
-    name: "March 7th",
-    series: "Honkai: Star Rail",
-    image: "https://raw.githubusercontent.com/yourusername/yourrepo/main/images/March7th.jpg",
-    description: "A cheerful girl with a mysterious past, wielding an ice bow.",
-    rarity: "R"
+    name: "Marin Kitagawa",
+    series: "My Dress-Up Darling",
+    image: "https://raw.githubusercontent.com/AlexCandiotes/Discord-Bot/main/images/lr_cards/Marin_Kitagawa.gif",
+    description: "The high school gyaru who lives boldly and pours her heart into cosplay.",
+    rarity: "LR"
 });
