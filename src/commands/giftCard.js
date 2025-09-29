@@ -11,14 +11,12 @@ module.exports = {
         const cardCode = args[1].toUpperCase();
         const recipient = message.mentions.users.first();
 
-        // Check if sender owns the card
         const [rows] = await pool.execute(
             'SELECT * FROM prints WHERE code = ? AND user_id = ?',
             [cardCode, message.author.id]
         );
         if (rows.length === 0) return message.channel.send('You do not own that card.');
 
-        // Transfer ownership to recipient
         await pool.execute(
             'UPDATE prints SET user_id = ? WHERE code = ?',
             [recipient.id, cardCode]

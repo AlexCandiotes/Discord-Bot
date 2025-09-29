@@ -13,26 +13,28 @@ module.exports = {
     description: 'Shows all cards you have dropped. Supports filtering by -series, -name, -rarity, -print, or -tag. You can also view another user\'s collection by mention or user ID.',
     async execute(message) {
         const args = message.content.split(' ');
-        let sql, params;
 
-        // Get target user (default to message author)
-        let targetUserId = message.author.id;
-        let targetUserTag = message.author.tag;
-        const userMention = message.mentions.users.first();
-        if (userMention) {
-            targetUserId = userMention.id;
-            targetUserTag = userMention.tag;
-        } else {
-            // Check for user ID in args
-            const userIdArg = args.find(arg => /^\d{17,19}$/.test(arg));
-            if (userIdArg) {
-                targetUserId = userIdArg;
-                const userObj = await message.client.users.fetch(userIdArg).catch(() => null);
-                if (userObj) targetUserTag = userObj.tag;
+        // --- User parsing: mention, user ID, or self ---
+        let user = message.mentions.users.first();
+        if (!user && args[1] && /^\d{17,19}$/.test(args[1])) {
+            try {
+                user = await message.client.users.fetch(args[1]);
+            } catch {
+                return message.channel.send('User not found.');
             }
         }
+        if (!user) user = message.author;
+        const targetUserId = user.id;
+        const targetUserTag = user.tag;
 
-        // Check for -tag argument
+        // Privacy check
+        const [invRows] = await pool.execute('SELECT private_collection FROM user_inventory WHERE user_id = ?', [targetUserId]);
+        if (targetUserId !== message.author.id && invRows.length && invRows[0].private_collection) {
+            return message.channel.send('This user\'s collection is private.');
+        }
+
+        let sql, params;
+
         const tagIndex = args.indexOf('-tag');
         if (tagIndex !== -1 && args[tagIndex + 1]) {
             const tagName = args[tagIndex + 1];
@@ -51,21 +53,21 @@ module.exports = {
             let filterSql = '';
             let filterValue = '';
 
-            if (args.includes('-series')) {
-                const idx = args.indexOf('-series');
+            if (args.includes('-series') || args.includes('-s')) {
+                const idx = args.indexOf('-series') !== -1 ? args.indexOf('-series') : args.indexOf('-s');
                 filterSql = 'AND c.series LIKE ?';
                 filterValue = `%${args.slice(idx + 1).join(' ')}%`;
-            } else if (args.includes('-name')) {
-                const idx = args.indexOf('-name');
+            } else if (args.includes('-name')|| args.includes('-n')) {
+                const idx = args.indexOf('-name') !== -1 ? args.indexOf('-name') : args.indexOf('-n');
                 filterSql = 'AND c.name LIKE ?';
                 filterValue = `%${args.slice(idx + 1).join(' ')}%`;
-            } else if (args.includes('-rarity')) {
-                const idx = args.indexOf('-rarity');
+            } else if (args.includes('-rarity') || args.includes('-r')) {
+                const idx = args.indexOf('-rarity') !== -1 ? args.indexOf('-rarity') : args.indexOf('-r');
                 filterSql = 'AND c.rarity = ?';
                 filterValue = args[idx + 1];
-            } else if (args.some(arg => arg.startsWith('-print'))) {
-                const printArg = args.find(arg => arg.startsWith('-print'));
-                const match = printArg.match(/-print([=<>])(\d+)/);
+            } else if (args.some(arg => arg.startsWith('-print') || arg.startsWith('-p'))) {
+                const printArg = args.find(arg => arg.startsWith('-print') || arg.startsWith('-p'));
+                const match = printArg.match(/-(?:print|p)([=<>])(\d+)/);
                 if (match) {
                     const operator = match[1];
                     const value = match[2];

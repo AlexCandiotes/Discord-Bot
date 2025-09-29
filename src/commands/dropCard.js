@@ -10,7 +10,7 @@ const rarityImages = {
     UR: path.join(__dirname, '../../images/gems/UR_gem.png'),
 };
 const gemAnimationGif = path.join(__dirname, '../../images/gems/gem.gif');
-const DROP_INTERVAL = 10 * 60 * 1000; // 10 minutes
+const DROP_INTERVAL = 10 * 60 * 1000;
 
 function getRandomRarity() {
     const rand = Math.random() * 100;
@@ -39,7 +39,6 @@ module.exports = {
         const userId = message.author.id;
         const now = Date.now();
 
-        // Get last drop from DB
         const [rows] = await pool.execute(
             'SELECT last_drop FROM drop_cooldowns WHERE user_id = ?',
             [userId]
@@ -55,7 +54,6 @@ module.exports = {
             );
         }
 
-        // Set cooldown in DB and reset notified, store channel_id
         await pool.execute(
             'REPLACE INTO drop_cooldowns (user_id, last_drop, notified, channel_id) VALUES (?, ?, 0, ?)',
             [userId, now, message.channel.id]
@@ -68,29 +66,33 @@ module.exports = {
             return message.channel.send('Sorry, no cards available for that rarity.');
         }
 
-        // 1. Send initial embed with gem GIF as attachment
         const embed = new EmbedBuilder()
-            .setTitle('A mysterious gem appears...')
-            .setImage('attachment://gem.gif')
-            .setColor(0xB39DDB);
+        .setTitle(`${message.author.username}'s Drop`)
+        .setDescription('You found a gem! It shimmers mysteriously...')
+        .setImage('attachment://gem.gif')
+        .setColor(0xB39DDB)
 
         const sentMsg = await message.channel.send({
             embeds: [embed],
             files: [{ attachment: gemAnimationGif, name: 'gem.gif' }]
         });
 
-        // 2. After 3 seconds, edit embed to show gem image and add button
         setTimeout(async () => {
             const gemEmbed = new EmbedBuilder()
-                .setTitle('A mysterious gem appears...')
-                .setImage('attachment://gem.png')
-                .setColor(0xB39DDB);
+            .setTitle(`${message.author.username}'s Drop`)
+            .setDescription('The gem shimmers with energy. What will you do?')
+            .setImage('attachment://gem.png')
+            .setColor(0xB39DDB);
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('open_gem')
                     .setLabel('Open Gem')
-                    .setStyle(ButtonStyle.Primary)
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('store_gem')
+                    .setLabel('Store Gem')
+                    .setStyle(ButtonStyle.Secondary)
             );
 
             await sentMsg.edit({
@@ -99,7 +101,6 @@ module.exports = {
                 components: [row]
             });
 
-            // 3. Wait for button interaction
             const collector = sentMsg.createMessageComponentCollector({
                 filter: i => i.user.id === message.author.id,
                 max: 1,
@@ -107,65 +108,68 @@ module.exports = {
             });
 
             collector.on('collect', async interaction => {
-                // Insert print record
-                const [result] = await pool.execute(
-                    'SELECT MAX(print_number) AS max_print FROM prints WHERE card_id = ?',
-                    [droppedCard.id]
-                );
-                const nextPrint = (result[0].max_print || 0) + 1;
-                const code = generateCode();
+                if (interaction.customId === 'open_gem') {
+                    const [result] = await pool.execute(
+                        'SELECT MAX(print_number) AS max_print FROM prints WHERE card_id = ?',
+                        [droppedCard.id]
+                    );
+                    const nextPrint = (result[0].max_print || 0) + 1;
+                    const code = generateCode();
 
-                await pool.execute(
-                    'INSERT INTO prints (user_id, card_id, print_number, code) VALUES (?, ?, ?, ?)',
-                    [message.author.id, droppedCard.id, nextPrint, code]
-                );
+                    await pool.execute(
+                        'INSERT INTO prints (user_id, card_id, print_number, code) VALUES (?, ?, ?, ?)',
+                        [message.author.id, droppedCard.id, nextPrint, code]
+                    );
 
-                // 4. Edit embed to show card details and card image
-                const resultEmbed = new EmbedBuilder()
-                    .setTitle('You opened the gem!')
-                    .setDescription(`**${droppedCard.name}** from **${droppedCard.series}**\nPrint: #${nextPrint}\nCode: ${code}`)
-                    .setImage(droppedCard.image)
-                    .setColor(0xB39DDB);
+                    const resultEmbed = new EmbedBuilder()
+                        .setTitle(`${message.author.username} opened the gem!`)
+                        .setDescription(`**${droppedCard.name}** from **${droppedCard.series}**\nPrint: #${nextPrint}\nCode: ${code}`)
+                        .setImage(droppedCard.image)
+                        .setColor(0xB39DDB);
 
-                await interaction.update({ embeds: [resultEmbed], files: [], components: [] });
+                    await interaction.update({ embeds: [resultEmbed], files: [], components: [] });
+                } else if (interaction.customId === 'store_gem') {
+                    const column = `${rarity}_gems`;
+                    await pool.execute(
+                        `UPDATE user_inventory SET ${column} = ${column} + 1 WHERE user_id = ?`,
+                        [message.author.id]
+                    );
+
+                    const storeEmbed = new EmbedBuilder()
+                        .setTitle('Gem Stored!')
+                        .setDescription(`${message.author.username} stored a **${rarity}** gem in your inventory.`)
+                        .setColor(0x42A5F5);
+
+                    await interaction.update({ embeds: [storeEmbed], files: [], components: [] });
+                }
             });
 
             collector.on('end', collected => {
                 if (collected.size === 0) {
-                    sentMsg.edit({ content: 'You did not open the gem in time!', components: [] });
+                    sentMsg.edit({ content: 'You did not choose in time!', components: [] });
                 }
             });
         }, 3000);
     },
 
-    // Drop timer command
     async droptimer(message) {
         const userId = message.author.id;
         const now = Date.now();
 
-        // Get last drop from DB
         const [rows] = await pool.execute(
             'SELECT last_drop FROM drop_cooldowns WHERE user_id = ?',
             [userId]
         );
         const lastDrop = rows.length ? Number(rows[0].last_drop) : null;
 
-        let embed;
         if (!lastDrop || now - lastDrop >= DROP_INTERVAL) {
-            embed = new EmbedBuilder()
-                .setTitle('Cooldowns')
-                .setDescription('Your current cooldowns are:\n\n**Drop Cooldown**\nYou can drop a card now!')
-                .setColor(0x42A5F5);
+            return message.channel.send('✅ You can drop a card now!');
         } else {
             const nextDropTimestamp = Math.floor((lastDrop + DROP_INTERVAL) / 1000);
-            embed = new EmbedBuilder()
-                .setTitle('Cooldowns')
-                .setDescription(
-                    `Your current cooldowns are:\n\n**Drop Cooldown**\n<t:${nextDropTimestamp}:R> (<t:${nextDropTimestamp}:f>)`
-                )
-                .setColor(0x42A5F5);
+            return message.channel.send(
+                `You must wait ${Math.ceil((DROP_INTERVAL - (now - lastDrop)) / 60000)} minutes to drop again, <@${userId}>.`
+            );
         }
-        return message.channel.send({ embeds: [embed] });
     },
 
     DROP_INTERVAL
