@@ -4,8 +4,8 @@ module.exports = {
     name: 'updateinventory',
     description: 'Update a user\'s inventory (admin only)',
     async execute(message, args) {
-        if (!message.member.permissions.has('Administrator')) {
-            return message.reply('You do not have permission to use this command.');
+        if (message.author.id !== '941763497623187518') {
+            return message.reply('Only the bot owner can use this command.');
         }
 
         const user = message.mentions.users.first();

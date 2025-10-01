@@ -2,12 +2,12 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const path = require('path');
 const pool = require('../utils/mysql');
 
-const rarityRates = { N: 50, R: 30, SR: 15, UR: 4 };
+const rarityRates = { N: 50, R: 30, SR: 15 };
 const rarityImages = {
     N: path.join(__dirname, '../../images/gems/N_gem.png'),
     R: path.join(__dirname, '../../images/gems/R_gem.png'),
     SR: path.join(__dirname, '../../images/gems/SR_gem.png'),
-    UR: path.join(__dirname, '../../images/gems/UR_gem.png'),
+    // UR: path.join(__dirname, '../../images/gems/UR_gem.png'),
 };
 const gemAnimationGif = path.join(__dirname, '../../images/gems/gem.gif');
 const DROP_INTERVAL = 10 * 60 * 1000;

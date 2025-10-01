@@ -19,6 +19,9 @@ const collectionPrivacy = require('./commands/collectionPrivacy');
 const register = require('./commands/register');
 const use = require('./commands/use');
 const pool = require('./utils/mysql');
+const addPrintZero = require('./commands/addPrintZero');
+const lookup = require('./commands/lookup');
+const trade = require('./commands/trade');
 
 const client = new Client({
     intents: [
@@ -201,6 +204,23 @@ client.on('messageCreate', async message => {
         await use.execute(message, args);
         return;
     }
+    // Add print zero
+    if (commandName === 'addprintzero') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await addPrintZero.execute(message, args);
+        return;
+    }
+    if (commandName === 'lookup') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await lookup.execute(message, args);
+        return;
+    }
+    if (commandName === 'trade') {
+    const args = commandBody.slice(commandName.length).trim().split(/ +/);
+    await trade.execute(message, args);
+    return;
+}
+    
 });
 
 client.login(process.env.BOT_TOKEN);
