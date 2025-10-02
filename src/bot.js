@@ -53,7 +53,7 @@ function setPrefix(guildId, prefix) {
 const logChannelId = process.env.LOG_CHANNEL_ID; // Set this in your .env file
 let logChannel;
 
-client.once('clientReady', () => {
+client.once('ready', () => {
     logChannel = client.channels.cache.get(logChannelId);
     if (!logChannel) {
         console.error('Log channel not found!');
@@ -64,8 +64,7 @@ client.once('clientReady', () => {
 
 // --- Drop notification background job ---
 const DROP_INTERVAL = 10 * 60 * 1000;
-client.once('clientReady', () => {
-    console.log('Bot is online!');
+client.once('ready', () => {
     setInterval(async () => {
         const now = Date.now();
         const [rows] = await pool.execute(
@@ -108,18 +107,7 @@ client.on('messageCreate', async message => {
 
     // Allow register command without registration check
     if (commandName === 'register') {
-        const replyMsg = await register.execute(message);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** register\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🔎 **Args:** ${args.join(' ')}\n` +
-                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
+        return await register.execute(message);
     }
 
     // Only check registration for known commands
@@ -146,331 +134,165 @@ client.on('messageCreate', async message => {
         return message.channel.send(`Prefix set to \`${newPrefix}\``);
     }
 
-    // Privacy commands (stop further processing after)
-    if (commandName === 'inventoryprivacy') {
-        const replyMsg = await inventoryPrivacy.execute(message);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** inventoryprivacy\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🔎 **Args:** ${args.join(' ')}\n` +
-                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
-    if (commandName === 'collectionprivacy') {
-        const replyMsg = await collectionPrivacy.execute(message);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** collectionprivacy\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🔎 **Args:** ${args.join(' ')}\n` +
-                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
-
-    // Inventory (aliases: inventory, inv)
-    if (commandName === 'inventory' || commandName === 'inv') {
-    const args = commandBody.slice(commandName.length).trim().split(/ +/);
-    const replyMsg = await inventory.execute(message, args);
-    if (logChannel && replyMsg) {
-        let botReplyText = replyMsg.content;
-        if ((!botReplyText || botReplyText === '') && replyMsg.embeds && replyMsg.embeds.length > 0) {
-            const embed = replyMsg.embeds[0];
-            botReplyText =
-                (embed.title ? `**${embed.title}**\n` : '') +
-                (embed.description ? `${embed.description}\n` : '');
-            if (embed.fields && embed.fields.length > 0) {
-                botReplyText += embed.fields.map(f => `**${f.name}**: ${f.value}`).join('\n');
-            }
-            botReplyText = botReplyText.trim() || '[Embed/No Text]';
-        }
-        logChannel.send(
-            `📝 **Command:** inventory\n` +
-            `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-            `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-            `💬 **Content:** ${message.content}\n` +
-            `🔎 **Args:** ${args.join(' ')}\n` +
-            `🤖 **Bot Reply:** ${botReplyText}`
-        ).catch(() => {});
-    }
-    return;
-}
-
-    // Collection (aliases: collection, c)
-    if (commandName === 'collection' || commandName === 'c') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await viewDroppedCards.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** collection\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
-
-    // Drop card (aliases: dropcard, d)
-    if (commandName === 'dropcard' || commandName === 'd') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await dropCard.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** dropcard\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
-
-    // Drop timer (aliases: droptimer, cooldown, cd)
-    if (commandName === 'droptimer' || commandName === 'cooldown' || commandName === 'cd') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await dropCard.droptimer.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** droptimer\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
-
-    // View card (aliases: view, v)
-    if (commandName === 'view' || commandName === 'v') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await viewCard.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** view\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
-
-    // Tag (aliases: tag, t)
-    if (commandName === 'tag' || commandName === 't') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await tag.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** tag\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
-
-    // Create tag (aliases: createtag, ct)
-    if (commandName === 'createtag' || commandName === 'ct') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await createTag.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** createtag\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
-
-    // Burn card (aliases: burncard, b)
-    if (commandName === 'burncard' || commandName === 'b') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await burnCard.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** burncard\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
+    // --- Only log for giftcard and trade commands ---
 
     // Gift card (aliases: giftcard, g)
     if (commandName === 'giftcard' || commandName === 'g') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
         const replyMsg = await giftCard.execute(message, args);
         if (logChannel && replyMsg) {
+            let botReplyText = replyMsg.content;
+            if ((!botReplyText || botReplyText === '') && replyMsg.embeds && replyMsg.embeds.length > 0) {
+                const embed = replyMsg.embeds[0];
+                botReplyText =
+                    (embed.title ? `**${embed.title}**\n` : '') +
+                    (embed.description ? `${embed.description}\n` : '');
+                if (embed.fields && embed.fields.length > 0) {
+                    botReplyText += embed.fields.map(f => `**${f.name}**: ${f.value}`).join('\n');
+                }
+                botReplyText = botReplyText.trim() || '[Embed/No Text]';
+            }
             logChannel.send(
                 `📝 **Command:** giftcard\n` +
                 `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
                 `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
                 `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+                `🔎 **Args:** ${args.join(' ')}\n` +
+                `🤖 **Bot Reply:** ${botReplyText}`
             ).catch(() => {});
         }
         return;
     }
 
-    // Help
-    if (commandName === 'help') {
-       const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await help.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** help\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
-
-    // Update inventory
-    if (commandName === 'updateinventory') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await updateInventory.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** updateinventory\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
-
-    // Use gem
-    if (commandName === 'use' || commandName === 'u') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await use.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** use\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
-    // Add card
-    if (commandName === 'addcard') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await addCard.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** addcard\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
-    // Add print zero
-    if (commandName === 'addprintzero') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await addPrintZero.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** addprintzero\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
-        return;
-    }
     // Trade (including "sadd" shortcut)
     if (commandName.startsWith('add')) {
-        // e.g. "sadd card 15BILY" or "sadd n gem 2"
         const args = ['add', ...commandBody.slice(commandName.length).trim().split(/ +/)];
         const replyMsg = await lookup.trade(message, args);
         if (logChannel && replyMsg) {
+            let botReplyText = replyMsg.content;
+            if ((!botReplyText || botReplyText === '') && replyMsg.embeds && replyMsg.embeds.length > 0) {
+                const embed = replyMsg.embeds[0];
+                botReplyText =
+                    (embed.title ? `**${embed.title}**\n` : '') +
+                    (embed.description ? `${embed.description}\n` : '');
+                if (embed.fields && embed.fields.length > 0) {
+                    botReplyText += embed.fields.map(f => `**${f.name}**: ${f.value}`).join('\n');
+                }
+                botReplyText = botReplyText.trim() || '[Embed/No Text]';
+            }
             logChannel.send(
                 `📝 **Command:** trade add\n` +
                 `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
                 `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
                 `💬 **Content:** ${message.content}\n` +
                 `🔎 **Args:** ${args.join(' ')}\n` +
-                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
+                `🤖 **Bot Reply:** ${botReplyText}`
             ).catch(() => {});
         }
         return;
     }
-    // Trade
     if (commandName === 'trade' || commandName === 't') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
         const replyMsg = await trade.execute(message, args);
         if (logChannel && replyMsg) {
+            let botReplyText = replyMsg.content;
+            if ((!botReplyText || botReplyText === '') && replyMsg.embeds && replyMsg.embeds.length > 0) {
+                const embed = replyMsg.embeds[0];
+                botReplyText =
+                    (embed.title ? `**${embed.title}**\n` : '') +
+                    (embed.description ? `${embed.description}\n` : '');
+                if (embed.fields && embed.fields.length > 0) {
+                    botReplyText += embed.fields.map(f => `**${f.name}**: ${f.value}`).join('\n');
+                }
+                botReplyText = botReplyText.trim() || '[Embed/No Text]';
+            }
             logChannel.send(
                 `📝 **Command:** trade\n` +
                 `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
                 `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
                 `💬 **Content:** ${message.content}\n` +
                 `🔎 **Args:** ${args.join(' ')}\n` +
-                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
+                `🤖 **Bot Reply:** ${botReplyText}`
             ).catch(() => {});
         }
         return;
     }
-    // Lookup
+
+    // --- All other commands: just execute, no logging ---
+
+    if (commandName === 'inventory' || commandName === 'inv') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await inventory.execute(message, args);
+        return;
+    }
+    if (commandName === 'collection' || commandName === 'c') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await viewDroppedCards.execute(message, args);
+        return;
+    }
+    if (commandName === 'dropcard' || commandName === 'd') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await dropCard.execute(message, args);
+        return;
+    }
+    if (commandName === 'droptimer' || commandName === 'cooldown' || commandName === 'cd') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await dropCard.droptimer.execute(message, args);
+        return;
+    }
+    if (commandName === 'view' || commandName === 'v') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await viewCard.execute(message, args);
+        return;
+    }
+    if (commandName === 'tag' || commandName === 't') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await tag.execute(message, args);
+        return;
+    }
+    if (commandName === 'createtag' || commandName === 'ct') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await createTag.execute(message, args);
+        return;
+    }
+    if (commandName === 'burncard' || commandName === 'b') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await burnCard.execute(message, args);
+        return;
+    }
+    if (commandName === 'help') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await help.execute(message, args);
+        return;
+    }
+    if (commandName === 'updateinventory') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await updateInventory.execute(message, args);
+        return;
+    }
+    if (commandName === 'use' || commandName === 'u') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await use.execute(message, args);
+        return;
+    }
+    if (commandName === 'addcard') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await addCard.execute(message, args);
+        return;
+    }
+    if (commandName === 'addprintzero') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await addPrintZero.execute(message, args);
+        return;
+    }
     if (commandName === 'lookup' || commandName === 'lu') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await lookup.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** lookup\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🔎 **Args:** ${args.join(' ')}\n` +
-                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
+        await lookup.execute(message, args);
         return;
     }
     if (commandName === 'info' || commandName === 'i') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        const replyMsg = await characterLookup.execute(message, args);
-        if (logChannel && replyMsg) {
-            logChannel.send(
-                `📝 **Command:** characterlookup\n` +
-                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
-                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
-                `💬 **Content:** ${message.content}\n` +
-                `🔎 **Args:** ${args.join(' ')}\n` +
-                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
-            ).catch(() => {});
-        }
+        await characterLookup.execute(message, args);
         return;
     }
 });
