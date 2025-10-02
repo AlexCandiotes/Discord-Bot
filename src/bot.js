@@ -22,6 +22,8 @@ const pool = require('./utils/mysql');
 const addPrintZero = require('./commands/addPrintZero');
 const lookup = require('./commands/lookup');
 const trade = require('./commands/trade');
+const addCard = require('./commands/addCard');
+const characterLookup = require('./commands/characterLookup');
 
 const client = new Client({
     intents: [
@@ -46,6 +48,19 @@ function setPrefix(guildId, prefix) {
     prefixes[guildId] = prefix;
     fs.writeFileSync(prefixesPath, JSON.stringify(prefixes, null, 2));
 }
+
+// --- Logging channel setup ---
+const logChannelId = process.env.LOG_CHANNEL_ID; // Set this in your .env file
+let logChannel;
+
+client.once('clientReady', () => {
+    logChannel = client.channels.cache.get(logChannelId);
+    if (!logChannel) {
+        console.error('Log channel not found!');
+    } else {
+        console.log('Bot is ready and log channel set.');
+    }
+});
 
 // --- Drop notification background job ---
 const DROP_INTERVAL = 10 * 60 * 1000;
@@ -93,7 +108,17 @@ client.on('messageCreate', async message => {
 
     // Allow register command without registration check
     if (commandName === 'register') {
-        await register.execute(message);
+        const replyMsg = await register.execute(message);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** register\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🔎 **Args:** ${args.join(' ')}\n` +
+                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
 
@@ -117,110 +142,337 @@ client.on('messageCreate', async message => {
         const newPrefix = args[0];
         if (!newPrefix) return message.reply('Usage: ' + prefix + 'setprefix <newPrefix>');
         setPrefix(message.guild.id, newPrefix);
+
         return message.channel.send(`Prefix set to \`${newPrefix}\``);
     }
 
     // Privacy commands (stop further processing after)
     if (commandName === 'inventoryprivacy') {
-        await inventoryPrivacy.execute(message);
+        const replyMsg = await inventoryPrivacy.execute(message);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** inventoryprivacy\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🔎 **Args:** ${args.join(' ')}\n` +
+                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
     if (commandName === 'collectionprivacy') {
-        await collectionPrivacy.execute(message);
+        const replyMsg = await collectionPrivacy.execute(message);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** collectionprivacy\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🔎 **Args:** ${args.join(' ')}\n` +
+                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
 
     // Inventory (aliases: inventory, inv)
     if (commandName === 'inventory' || commandName === 'inv') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        await inventory.execute(message, args);
-        return;
+    const args = commandBody.slice(commandName.length).trim().split(/ +/);
+    const replyMsg = await inventory.execute(message, args);
+    if (logChannel && replyMsg) {
+        let botReplyText = replyMsg.content;
+        if ((!botReplyText || botReplyText === '') && replyMsg.embeds && replyMsg.embeds.length > 0) {
+            const embed = replyMsg.embeds[0];
+            botReplyText =
+                (embed.title ? `**${embed.title}**\n` : '') +
+                (embed.description ? `${embed.description}\n` : '');
+            if (embed.fields && embed.fields.length > 0) {
+                botReplyText += embed.fields.map(f => `**${f.name}**: ${f.value}`).join('\n');
+            }
+            botReplyText = botReplyText.trim() || '[Embed/No Text]';
+        }
+        logChannel.send(
+            `📝 **Command:** inventory\n` +
+            `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+            `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+            `💬 **Content:** ${message.content}\n` +
+            `🔎 **Args:** ${args.join(' ')}\n` +
+            `🤖 **Bot Reply:** ${botReplyText}`
+        ).catch(() => {});
     }
+    return;
+}
 
     // Collection (aliases: collection, c)
     if (commandName === 'collection' || commandName === 'c') {
-        await viewDroppedCards.execute(message);
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        const replyMsg = await viewDroppedCards.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** collection\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
 
     // Drop card (aliases: dropcard, d)
     if (commandName === 'dropcard' || commandName === 'd') {
-        await dropCard.execute(message);
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        const replyMsg = await dropCard.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** dropcard\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
 
     // Drop timer (aliases: droptimer, cooldown, cd)
     if (commandName === 'droptimer' || commandName === 'cooldown' || commandName === 'cd') {
-        await dropCard.droptimer(message);
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        const replyMsg = await dropCard.droptimer.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** droptimer\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
 
     // View card (aliases: view, v)
     if (commandName === 'view' || commandName === 'v') {
-        await viewCard.execute(message);
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        const replyMsg = await viewCard.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** view\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
 
     // Tag (aliases: tag, t)
     if (commandName === 'tag' || commandName === 't') {
-        await tag.execute(message);
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        const replyMsg = await tag.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** tag\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
 
     // Create tag (aliases: createtag, ct)
     if (commandName === 'createtag' || commandName === 'ct') {
-        await createTag.execute(message);
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        const replyMsg = await createTag.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** createtag\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
 
     // Burn card (aliases: burncard, b)
     if (commandName === 'burncard' || commandName === 'b') {
-        await burnCard.execute(message);
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        const replyMsg = await burnCard.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** burncard\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
 
     // Gift card (aliases: giftcard, g)
     if (commandName === 'giftcard' || commandName === 'g') {
-        await giftCard.execute(message);
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        const replyMsg = await giftCard.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** giftcard\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
 
     // Help
     if (commandName === 'help') {
-        await help.execute(message);
+       const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        const replyMsg = await help.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** help\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
 
     // Update inventory
     if (commandName === 'updateinventory') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        await updateInventory.execute(message, args);
+        const replyMsg = await updateInventory.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** updateinventory\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
 
     // Use gem
-    if (commandName === 'use') {
+    if (commandName === 'use' || commandName === 'u') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        await use.execute(message, args);
+        const replyMsg = await use.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** use\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
+        return;
+    }
+    // Add card
+    if (commandName === 'addcard') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        const replyMsg = await addCard.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** addcard\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
     // Add print zero
     if (commandName === 'addprintzero') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        await addPrintZero.execute(message, args);
+        const replyMsg = await addPrintZero.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** addprintzero\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🤖 **Bot Reply:** ${replyMsg?.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
-    if (commandName === 'lookup') {
+    // Trade (including "sadd" shortcut)
+    if (commandName.startsWith('add')) {
+        // e.g. "sadd card 15BILY" or "sadd n gem 2"
+        const args = ['add', ...commandBody.slice(commandName.length).trim().split(/ +/)];
+        const replyMsg = await lookup.trade(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** trade add\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🔎 **Args:** ${args.join(' ')}\n` +
+                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
+        return;
+    }
+    // Trade
+    if (commandName === 'trade' || commandName === 't') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        await lookup.execute(message, args);
+        const replyMsg = await trade.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** trade\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🔎 **Args:** ${args.join(' ')}\n` +
+                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
         return;
     }
-    if (commandName === 'trade') {
-    const args = commandBody.slice(commandName.length).trim().split(/ +/);
-    await trade.execute(message, args);
-    return;
-}
-    
+    // Lookup
+    if (commandName === 'lookup' || commandName === 'lu') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        const replyMsg = await lookup.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** lookup\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🔎 **Args:** ${args.join(' ')}\n` +
+                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
+        return;
+    }
+    if (commandName === 'info' || commandName === 'i') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        const replyMsg = await characterLookup.execute(message, args);
+        if (logChannel && replyMsg) {
+            logChannel.send(
+                `📝 **Command:** characterlookup\n` +
+                `👤 **User:** ${message.author.tag} (${message.author.id})\n` +
+                `#️⃣ **Channel:** ${message.channel.name} (${message.channel.id})\n` +
+                `💬 **Content:** ${message.content}\n` +
+                `🔎 **Args:** ${args.join(' ')}\n` +
+                `🤖 **Bot Reply:** ${replyMsg.content || '[Embed/No Text]'}`
+            ).catch(() => {});
+        }
+        return;
+    }
 });
 
 client.login(process.env.BOT_TOKEN);

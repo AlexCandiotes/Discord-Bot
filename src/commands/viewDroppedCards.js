@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const pool = require('../utils/mysql');
 
 const rarityIcons = {
@@ -7,6 +7,28 @@ const rarityIcons = {
     N: '⬜',
     default: '⬜'
 };
+
+// In-memory cache for pagination (per user, per channel)
+const paginationCache = {};
+
+function getPage(cards, page, pageSize) {
+    const start = page * pageSize;
+    return cards.slice(start, start + pageSize);
+}
+
+function buildEmbed(cards, page, pageSize, total, userId, userTag) {
+    const pageCards = getPage(cards, page, pageSize);
+    let collectionLines = pageCards.map(card => {
+        const icon = card.emoji || rarityIcons[card.rarity] || rarityIcons.default;
+        return `${icon} \`${card.code}\`  #${card.print_number}  ·  *${card.series}*  ·  ${card.name} ${card.rarity ? `[${card.rarity}]` : ''}`;
+    });
+
+    return new EmbedBuilder()
+        .setColor(0x5DADE2)
+        .setTitle(`🌈 Card Collection`)
+        .setDescription(`Cards owned by <@${userId}> (${userTag})\n\n` + (collectionLines.join('\n') || '*No cards on this page.*'))
+        .setFooter({ text: `✨ Page ${page + 1} of ${Math.ceil(total / pageSize)} • Use arrows to scroll pages!` });
+}
 
 module.exports = {
     name: 'viewDroppedCards',
@@ -46,7 +68,6 @@ module.exports = {
                 LEFT JOIN user_tags ut ON ut.user_id = ct.user_id AND ut.tag_name = ct.tag_name
                 WHERE ct.user_id = ? AND ct.tag_name = ?
                 ORDER BY p.obtained_at DESC
-                LIMIT 10
             `;
             params = [targetUserId, tagName];
         } else {
@@ -57,8 +78,8 @@ module.exports = {
                 const idx = args.indexOf('-series') !== -1 ? args.indexOf('-series') : args.indexOf('-s');
                 filterSql = 'AND c.series LIKE ?';
                 filterValue = `%${args.slice(idx + 1).join(' ')}%`;
-            } else if (args.includes('-name')|| args.includes('-n')) {
-                const idx = args.indexOf('-name') !== -1 ? args.indexOf('-name') : args.indexOf('-n');
+            } else if (args.includes('-character')|| args.includes('-c')) {
+                const idx = args.indexOf('-character') !== -1 ? args.indexOf('-character') : args.indexOf('-c');
                 filterSql = 'AND c.name LIKE ?';
                 filterValue = `%${args.slice(idx + 1).join(' ')}%`;
             } else if (args.includes('-rarity') || args.includes('-r')) {
@@ -83,28 +104,86 @@ module.exports = {
                 WHERE p.user_id = ?
                 ${filterSql}
                 ORDER BY p.obtained_at DESC
-                LIMIT 10
             `;
             params = filterSql ? [targetUserId, filterValue] : [targetUserId];
         }
 
         const [rows] = await pool.execute(sql, params);
 
-        if (rows.length > 0) {
-            let collectionLines = rows.map(card => {
-                const icon = card.emoji || rarityIcons[card.rarity] || rarityIcons.default;
-                return `${icon} \`${card.code}\`  #${card.print_number}  ·  *${card.series}*  ·  ${card.name} ${card.rarity ? `[${card.rarity}]` : ''}`;
-            });
-
-            const embed = new EmbedBuilder()
-                .setColor(0x5DADE2)
-                .setTitle(`🌈 Card Collection`)
-                .setDescription(`Cards owned by <@${targetUserId}> (${targetUserTag})\n\n` + collectionLines.join('\n'))
-                .setFooter({ text: '✨ Showing your latest 10 cards • Use arrows to scroll pages!' });
-
-            await message.channel.send({ embeds: [embed] });
-        } else {
-            message.channel.send('No cards found with that filter.');
+        if (!rows.length) {
+            return message.channel.send('No cards found with that filter.');
         }
+
+        // Pagination setup
+        const pageSize = 10;
+        let page = 0;
+        const total = rows.length;
+
+        // Store in cache for this user/channel
+        const cacheKey = `${message.channel.id}_${message.author.id}`;
+        paginationCache[cacheKey] = {
+            cards: rows,
+            page,
+            pageSize,
+            userId: targetUserId,
+            userTag: targetUserTag
+        };
+
+        // Build first embed
+        const embed = buildEmbed(rows, page, pageSize, total, targetUserId, targetUserTag);
+
+        // Buttons
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('prev_page')
+                .setEmoji('⬅️')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(true),
+            new ButtonBuilder()
+                .setCustomId('next_page')
+                .setEmoji('➡️')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(total <= pageSize)
+        );
+
+        const sentMsg = await message.channel.send({ embeds: [embed], components: [row] });
+
+        // Collector for button interactions
+        const collector = sentMsg.createMessageComponentCollector({
+            filter: i => i.user.id === message.author.id,
+            time: 120000
+        });
+
+        collector.on('collect', async interaction => {
+            let cache = paginationCache[cacheKey];
+            if (!cache) return interaction.reply({ content: 'Session expired.', ephemeral: true });
+
+            if (interaction.customId === 'prev_page') {
+                if (cache.page > 0) cache.page--;
+            } else if (interaction.customId === 'next_page') {
+                if ((cache.page + 1) * cache.pageSize < cache.cards.length) cache.page++;
+            }
+
+            // Update embed and buttons
+            const newEmbed = buildEmbed(cache.cards, cache.page, cache.pageSize, cache.cards.length, cache.userId, cache.userTag);
+            const newRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('prev_page')
+                    .setEmoji('⬅️')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(cache.page === 0),
+                new ButtonBuilder()
+                    .setCustomId('next_page')
+                    .setEmoji('➡️')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled((cache.page + 1) * cache.pageSize >= cache.cards.length)
+            );
+            await interaction.update({ embeds: [newEmbed], components: [newRow] });
+        });
+
+        collector.on('end', () => {
+            delete paginationCache[cacheKey];
+            sentMsg.edit({ components: [] }).catch(() => {});
+        });
     },
 };

@@ -56,12 +56,14 @@ module.exports = {
             setTrade(userId, {
                 with: mention.id,
                 offer: { cards: [], gems: {}, coins: 0, hearts: 0, frames: [] },
-                confirmed: false
+                confirmed: false,
+                tradeBoxMsgId: null
             });
             setTrade(mention.id, {
                 with: userId,
                 offer: { cards: [], gems: {}, coins: 0, hearts: 0, frames: [] },
-                confirmed: false
+                confirmed: false,
+                tradeBoxMsgId: null
             });
 
             const row = new ActionRowBuilder().addComponents(
@@ -106,11 +108,20 @@ module.exports = {
                             .setStyle(ButtonStyle.Secondary)
                     );
 
-                    const tradeMsg = await message.channel.send({
+                    // Send the trade box and store its message ID
+                    const tradeBoxMsg = await message.channel.send({
                         content: `🔄 ${userMention(userId)} and ${userMention(mention.id)}, add items if you wish, then lock your offer with 🔒.`,
                         embeds: [embed],
                         components: [row]
                     });
+
+                    // Store the trade box message ID in both trade sessions
+                    const tradeA = getTrade(userId);
+                    const tradeB = getTrade(mention.id);
+                    tradeA.tradeBoxMsgId = tradeBoxMsg.id;
+                    tradeB.tradeBoxMsgId = tradeBoxMsg.id;
+                    setTrade(userId, tradeA);
+                    setTrade(mention.id, tradeB);
 
                     // Start the lock/confirm collector immediately
                     const locked = { [userId]: false, [mention.id]: false };
@@ -119,7 +130,7 @@ module.exports = {
                     const lockFilter = i =>
                         (i.user.id === userId || i.user.id === mention.id) &&
                         (i.customId === 'trade_lock' || i.customId === 'trade_tick');
-                    const lockCollector = tradeMsg.createMessageComponentCollector({ filter: lockFilter, time: 120000 });
+                    const lockCollector = tradeBoxMsg.createMessageComponentCollector({ filter: lockFilter, time: 120000 });
 
                     lockCollector.on('collect', async interaction => {
                         const tradeA = getTrade(userId);
@@ -147,13 +158,13 @@ module.exports = {
                                         .setLabel('Confirm Trade')
                                         .setStyle(ButtonStyle.Success)
                                 );
-                                await tradeMsg.edit({
+                                await tradeBoxMsg.edit({
                                     content: `🔒 Both offers are locked! ${userMention(userId)} and ${userMention(mention.id)}, click ✅ to complete the trade.`,
                                     embeds: [updatedEmbed],
                                     components: [row]
                                 });
                             } else {
-                                await tradeMsg.edit({
+                                await tradeBoxMsg.edit({
                                     content: `🔄 ${userMention(userId)} and ${userMention(mention.id)}, lock your offers with 🔒.\n` +
                                         `${locked[userId] ? `${userMention(userId)} has locked.` : ''} ${locked[mention.id] ? `${userMention(mention.id)} has locked.` : ''}`,
                                     embeds: [updatedEmbed],
@@ -179,7 +190,7 @@ module.exports = {
                             if (ready[userId] && ready[mention.id]) {
                                 lockCollector.stop('completed');
                             } else {
-                                await tradeMsg.edit({
+                                await tradeBoxMsg.edit({
                                     content: `✅ Waiting for both to confirm with ✅.\n` +
                                         `${ready[userId] ? `${userMention(userId)} is ready.` : ''} ${ready[mention.id] ? `${userMention(mention.id)} is ready.` : ''}`,
                                     embeds: [updatedEmbed],
@@ -247,10 +258,10 @@ module.exports = {
                             }
 
                             clearTrade(userId, mention.id);
-                            await tradeMsg.edit({ content: '✅ Trade complete! Items have been exchanged.', components: [], embeds: [] });
+                            await tradeBoxMsg.edit({ content: '✅ Trade complete! Items have been exchanged.', components: [], embeds: [] });
                         } else {
                             clearTrade(userId, mention.id);
-                            await tradeMsg.edit({ content: 'Trade cancelled or timed out.', components: [], embeds: [] });
+                            await tradeBoxMsg.edit({ content: 'Trade cancelled or timed out.', components: [], embeds: [] });
                         }
                     });
 
@@ -291,15 +302,27 @@ module.exports = {
                 if (!rows.length) return message.reply('You do not own that card.');
                 trade.offer.cards.push(code);
                 setTrade(userId, trade);
-            } else if (itemType.endsWith('gem')) {
-                const rarity = itemType.replace(' gem', '').toUpperCase();
-                const amount = parseInt(itemArgs[0]) || 1;
+            }
+            // Gems: support both "r gem 1" and "r 1"
+            else if (
+                (itemType.length === 1 && ['n', 'r', 's', 'u', 'l'].includes(itemType)) || // "r"
+                itemType.endsWith('gem') // "r gem"
+            ) {
+                let rarity, amount;
+                if (itemType.endsWith('gem')) {
+                    rarity = itemType.replace(' gem', '').toUpperCase();
+                    amount = parseInt(itemArgs[0]) || 1;
+                } else {
+                    rarity = itemType.toUpperCase();
+                    amount = parseInt(itemArgs[1]) || 1;
+                }
                 const column = `${rarity}_gems`;
                 const [rows] = await pool.execute(`SELECT ${column} FROM user_inventory WHERE user_id = ?`, [userId]);
                 if (!rows.length || rows[0][column] < amount) return message.reply(`You do not have enough ${rarity} gems.`);
                 trade.offer.gems[rarity] = (trade.offer.gems[rarity] || 0) + amount;
                 setTrade(userId, trade);
-            } else if (itemType === 'coins') {
+            }
+            else if (itemType === 'coins') {
                 const amount = parseInt(itemArgs[0]);
                 if (!amount || amount < 1) return message.reply('Specify a valid amount.');
                 const [rows] = await pool.execute('SELECT coins FROM user_inventory WHERE user_id = ?', [userId]);
@@ -326,13 +349,29 @@ module.exports = {
                 return message.reply('Unknown item type.');
             }
 
-            // Show the trade box after every add
+            // Edit the existing trade box message instead of sending a new one
             const userA = await message.client.users.fetch(userId);
             const userB = await message.client.users.fetch(trade.with);
+            const tradeA = getTrade(userId);
             const tradeB = getTrade(trade.with);
-            await message.channel.send({
-                embeds: [tradeBoxEmbed(userA, trade.offer, userB, tradeB ? tradeB.offer : { cards: [], gems: {}, coins: 0, hearts: 0, frames: [] })]
-            });
+            const channel = message.channel;
+            if (tradeA.tradeBoxMsgId) {
+                try {
+                    const tradeBoxMsg = await channel.messages.fetch(tradeA.tradeBoxMsgId);
+                    await tradeBoxMsg.edit({
+                        embeds: [tradeBoxEmbed(userA, tradeA.offer, userB, tradeB ? tradeB.offer : { cards: [], gems: {}, coins: 0, hearts: 0, frames: [] })]
+                    });
+                } catch (e) {
+                    // fallback: send a new one if not found
+                    const newMsg = await channel.send({
+                        embeds: [tradeBoxEmbed(userA, tradeA.offer, userB, tradeB ? tradeB.offer : { cards: [], gems: {}, coins: 0, hearts: 0, frames: [] })]
+                    });
+                    tradeA.tradeBoxMsgId = newMsg.id;
+                    tradeB.tradeBoxMsgId = newMsg.id;
+                    setTrade(userId, tradeA);
+                    setTrade(trade.with, tradeB);
+                }
+            }
 
             return message.reply('Item added to your trade offer.');
         }
@@ -366,7 +405,7 @@ module.exports = {
                 '**Trade Command Usage:**\n' +
                 '`trade @user` — Start a trade\n' +
                 '`add card CODE` or `sadd card CODE` — Add a card\n' +
-                '`add n gem 2` or `sadd n gem 2` — Add 2 N gems\n' +
+                '`add n gem 2` or `sadd n gem 2` or `sadd n 2` — Add 2 N gems\n' +
                 '`add coins 100` or `sadd coins 100` — Add 100 coins\n' +
                 '`add hearts 5` or `sadd hearts 5` — Add 5 hearts\n' +
                 '`add frame FrameName` or `sadd frame FrameName` — Add a frame\n' +

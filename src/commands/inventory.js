@@ -108,5 +108,7 @@ module.exports = {
         collector.on('end', () => {
             sentMsg.edit({ components: [] }).catch(() => {});
         });
+
+        return sentMsg;
     }
 };
