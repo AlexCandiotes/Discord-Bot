@@ -260,11 +260,6 @@ client.on('messageCreate', async message => {
         await burnCard.execute(message, args);
         return;
     }
-    if (commandName === 'help') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        await help.execute(message, args);
-        return;
-    }
     if (commandName === 'updateinventory') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
         await updateInventory.execute(message, args);
