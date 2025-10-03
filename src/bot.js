@@ -162,12 +162,24 @@ client.on('messageCreate', async message => {
             ).catch(() => {});
         }
         return;
+    }    
+    // Add card (admin only)
+    if (commandName === 'addcard') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await addCard.execute(message, args);
+        return;
+    }
+    // Add Print Zero (admin only)
+    if (commandName === 'addprintzero') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await addPrintZero.execute(message, args);
+        return;
     }
 
     // Trade (including "sadd" shortcut)
     if (commandName.startsWith('add')) {
         const args = ['add', ...commandBody.slice(commandName.length).trim().split(/ +/)];
-        const replyMsg = await lookup.trade(message, args);
+        const replyMsg = await trade.execute(message, args);
         if (logChannel && replyMsg) {
             let botReplyText = replyMsg.content;
             if ((!botReplyText || botReplyText === '') && replyMsg.embeds && replyMsg.embeds.length > 0) {
@@ -268,16 +280,6 @@ client.on('messageCreate', async message => {
     if (commandName === 'use' || commandName === 'u') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
         await use.execute(message, args);
-        return;
-    }
-    if (commandName === 'addcard') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        await addCard.execute(message, args);
-        return;
-    }
-    if (commandName === 'addprintzero') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        await addPrintZero.execute(message, args);
         return;
     }
     if (commandName === 'lookup' || commandName === 'lu') {

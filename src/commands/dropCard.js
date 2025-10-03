@@ -1,4 +1,5 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const drawCard = require('../utils/drawCard');
 const path = require('path');
 const pool = require('../utils/mysql');
 
@@ -33,7 +34,7 @@ function generateCode() {
 }
 
 module.exports = {
-    name: 'dropCard',
+    name: 'dropcard',
     description: 'Drop a card and open the gem to reveal it.',
     async execute(message) {
         const userId = message.author.id;
@@ -67,10 +68,10 @@ module.exports = {
         }
 
         const embed = new EmbedBuilder()
-        .setTitle(`${message.author.username}'s Drop`)
-        .setDescription('You found a gem! It shimmers mysteriously...')
-        .setImage('attachment://gem.gif')
-        .setColor(0xB39DDB)
+            .setTitle(`${message.author.username}'s Drop`)
+            .setDescription('You found a gem! It shimmers mysteriously...')
+            .setImage('attachment://gem.gif')
+            .setColor(0xB39DDB);
 
         const sentMsg = await message.channel.send({
             embeds: [embed],
@@ -79,10 +80,10 @@ module.exports = {
 
         setTimeout(async () => {
             const gemEmbed = new EmbedBuilder()
-            .setTitle(`${message.author.username}'s Drop`)
-            .setDescription('The gem shimmers with energy. What will you do?')
-            .setImage('attachment://gem.png')
-            .setColor(0xB39DDB);
+                .setTitle(`${message.author.username}'s Drop`)
+                .setDescription('The gem shimmers with energy. What will you do?')
+                .setImage('attachment://gem.png')
+                .setColor(0xB39DDB);
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
@@ -121,13 +122,17 @@ module.exports = {
                         [message.author.id, droppedCard.id, nextPrint, code]
                     );
 
+                    // Draw the card image with the new layout
+                    const buffer = await drawCard(droppedCard.image, droppedCard.name, nextPrint);
+                    const attachment = new AttachmentBuilder(buffer, { name: 'card.png' });
+
                     const resultEmbed = new EmbedBuilder()
                         .setTitle(`${message.author.username} opened the gem!`)
                         .setDescription(`**${droppedCard.name}** from **${droppedCard.series}**\nPrint: #${nextPrint}\nCode: ${code}`)
-                        .setImage(droppedCard.image)
+                        .setImage('attachment://card.png')
                         .setColor(0xB39DDB);
 
-                    await interaction.update({ embeds: [resultEmbed], files: [], components: [] });
+                    await interaction.update({ embeds: [resultEmbed], files: [attachment], components: [] });
                 } else if (interaction.customId === 'store_gem') {
                     const column = `${rarity}_gems`;
                     await pool.execute(
