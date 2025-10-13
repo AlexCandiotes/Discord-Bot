@@ -39,19 +39,44 @@ module.exports = {
         const userId = message.author.id;
         const now = Date.now();
 
+        // --- BOOSTS: Fetch user inventory for boosts ---
+        const [invRows] = await pool.execute(
+            'SELECT half_cooldown_until, extra_drop_until, extra_drop_count FROM user_inventory WHERE user_id = ?',
+            [userId]
+        );
+        const inv = invRows[0] || {};
+
+        // Half Cooldown logic
+        const halfCooldownActive = inv.half_cooldown_until > now;
+        const cooldown = halfCooldownActive ? (DROP_INTERVAL / 2) : DROP_INTERVAL;
+
+        // Check last drop time
         const [rows] = await pool.execute(
             'SELECT last_drop FROM drop_cooldowns WHERE user_id = ?',
             [userId]
         );
         const lastDrop = rows.length ? Number(rows[0].last_drop) : null;
 
-        if (lastDrop && now - lastDrop < DROP_INTERVAL) {
-            const nextDropTimestamp = Math.floor((lastDrop + DROP_INTERVAL) / 1000);
-            const remaining = DROP_INTERVAL - (now - lastDrop);
-            const minutes = Math.ceil(remaining / 60000);
-            return message.channel.send(
-                `You must wait ${minutes} minute${minutes !== 1 ? 's' : ''} to drop again, <@${userId}>. (<t:${nextDropTimestamp}:R>)`
+        // If user has extra_drop_count > 0, allow instant drop (ignore cooldown)
+        let usingExtraDrop = false;
+        if (inv.extra_drop_count > 0 && lastDrop && now - lastDrop < cooldown) {
+            usingExtraDrop = true;
+            // Decrement extra_drop_count immediately
+            await pool.execute(
+                'UPDATE user_inventory SET extra_drop_count = extra_drop_count - 1 WHERE user_id = ?',
+                [userId]
             );
+        } else if (lastDrop && now - lastDrop < cooldown) {
+            const nextDropTimestamp = Math.floor((lastDrop + cooldown) / 1000);
+            const remaining = cooldown - (now - lastDrop);
+            const minutes = Math.ceil(remaining / 60000);
+            const embed = new EmbedBuilder()
+                .setTitle('Drop Cooldown')
+                .setDescription(
+                    `⏳ You must wait **${minutes} minute${minutes !== 1 ? 's' : ''}** to drop again, <@${userId}>.\n(<t:${nextDropTimestamp}:R>)`
+                )
+                .setColor(0xB39DDB);
+            return message.channel.send({ embeds: [embed] });
         }
 
         await pool.execute(
@@ -128,9 +153,60 @@ module.exports = {
                         [message.author.id, droppedCard.id, nextPrint, code, cardImageUrl]
                     );
 
+                    let resultDesc = `**Name:** ${droppedCard.name}\n**Series:** ${droppedCard.series}\n**Rarity:** ${rarity}\n**Print:** #${nextPrint}\n**Code:** ${code}`;
+
+                    // --- Chance to Drop Extra logic as its own EmbedBuilder ---
+                    const extraDropActive = inv.extra_drop_until > Date.now();
+                    if (extraDropActive && Math.random() < 0.25) { // 25% chance
+                        // Drop an extra card (same rarity)
+                        const extraCard = await getRandomCardByRarity(rarity);
+                        const [extraResult] = await pool.execute(
+                            'SELECT MAX(print_number) AS max_print FROM prints WHERE card_id = ?',
+                            [extraCard.id]
+                        );
+                        const extraPrint = (extraResult[0].max_print || 0) + 1;
+                        const extraCode = generateCode();
+                        const extraBuffer = await drawCard(extraCard.image, extraCard.name, extraPrint);
+                        const extraAttachment = new AttachmentBuilder(extraBuffer, { name: `${extraCode}.png` });
+                        const extraUploadMsg = await cardUploadChannel.send({ files: [extraAttachment] });
+                        const extraCardImageUrl = extraUploadMsg.attachments.first().url;
+
+                        await pool.execute(
+                            'INSERT INTO prints (user_id, card_id, print_number, code, card_image) VALUES (?, ?, ?, ?, ?)',
+                            [message.author.id, extraCard.id, extraPrint, extraCode, extraCardImageUrl]
+                        );
+
+                        // Send a separate embed for the bonus drop
+                        const bonusEmbed = new EmbedBuilder()
+                            .setTitle('🎉 Bonus Drop! (Chance to Drop Extra)')
+                            .setDescription(
+                                `**Name:** ${extraCard.name}\n` +
+                                `**Series:** ${extraCard.series}\n` +
+                                `**Rarity:** ${rarity}\n` +
+                                `**Print:** #${extraPrint}\n` +
+                                `**Code:** ${extraCode}`
+                            )
+                            .setImage(extraCardImageUrl)
+                            .setColor(0x43B581);
+
+                        await message.channel.send({ embeds: [bonusEmbed] });
+                    }
+
+                    // If user used an extra drop, show how many remain
+                    let extraDropMsg = '';
+                    if (usingExtraDrop) {
+                        // Get updated count
+                        const [updatedInvRows] = await pool.execute(
+                            'SELECT extra_drop_count FROM user_inventory WHERE user_id = ?',
+                            [userId]
+                        );
+                        const remaining = updatedInvRows[0]?.extra_drop_count || 0;
+                        extraDropMsg = `\n\nYou used an **Extra Drop (Sphere)**! You have **${remaining}** remaining.`;
+                    }
+
                     const resultEmbed = new EmbedBuilder()
                         .setTitle(`${message.author.username} opened the gem!`)
-                        .setDescription(`**Name:** ${droppedCard.name}\n**Series:** ${droppedCard.series}\n**Rarity:** ${rarity}\n**Print:** #${nextPrint}\n**Code:** ${code}`)
+                        .setDescription(resultDesc + extraDropMsg)
                         .setImage(cardImageUrl)
                         .setColor(0xB39DDB);
 
@@ -164,6 +240,15 @@ module.exports = {
         const userId = message.author.id;
         const now = Date.now();
 
+        // --- BOOSTS: Fetch user inventory for boosts ---
+        const [invRows] = await pool.execute(
+            'SELECT half_cooldown_until FROM user_inventory WHERE user_id = ?',
+            [userId]
+        );
+        const inv = invRows[0] || {};
+        const halfCooldownActive = inv.half_cooldown_until > now;
+        const cooldown = halfCooldownActive ? (DROP_INTERVAL / 2) : DROP_INTERVAL;
+
         const [rows] = await pool.execute(
             'SELECT last_drop FROM drop_cooldowns WHERE user_id = ?',
             [userId]
@@ -171,14 +256,14 @@ module.exports = {
         const lastDrop = rows.length ? Number(rows[0].last_drop) : null;
 
         let embed;
-        if (!lastDrop || now - lastDrop >= DROP_INTERVAL) {
+        if (!lastDrop || now - lastDrop >= cooldown) {
             embed = new EmbedBuilder()
                 .setTitle('Drop Timer')
                 .setDescription('✅ You can drop a card now!')
                 .setColor(0x42A5F5);
         } else {
-            const nextDropTimestamp = Math.floor((lastDrop + DROP_INTERVAL) / 1000);
-            const minutes = Math.ceil((DROP_INTERVAL - (now - lastDrop)) / 60000);
+            const nextDropTimestamp = Math.floor((lastDrop + cooldown) / 1000);
+            const minutes = Math.ceil((cooldown - (now - lastDrop)) / 60000);
             embed = new EmbedBuilder()
                 .setTitle('Drop Timer')
                 .setDescription(

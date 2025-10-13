@@ -52,14 +52,25 @@ module.exports = {
                         { name: 'Frames', value: frames.length ? frames.join(', ') : 'None', inline: false }
                     )
                     .setColor(0xAB47BC);
-            } else {
+            } else if (page === 2) {
                 return new EmbedBuilder()
                     .setTitle(`${user.username}'s Currency`)
                     .addFields(
                         { name: 'Coins', value: `${inv.coins}`, inline: true },
-                        { name: 'Hearts', value: `${inv.hearts}`, inline: true }
+                        { name: 'Sphere', value: `${inv.sphere}`, inline: true },
+                        { name: 'Essence', value: `${inv.essence}`, inline: true }
                     )
                     .setColor(0xFFD700);
+            }
+            else if (page === 3) {
+                return new EmbedBuilder()
+                    .setTitle(`${user.username}'s Boosts and Items`)
+                    .addFields(
+                        { name: 'Half Cooldown', value: inv.half_cooldown_until > Date.now() ? `<t:${Math.floor(inv.half_cooldown_until/1000)}:R>` : 'Inactive', inline: false },
+                        { name: 'Chance to Drop Extra', value: inv.extra_drop_until > Date.now() ? `<t:${Math.floor(inv.extra_drop_until/1000)}:R>` : 'Inactive', inline: false },
+                        { name: 'Extra Drops', value: `${inv.extra_drop_count || 0}`, inline: false }
+                    )
+                    .setColor(0x00bcd4);
             }
         }
 
@@ -79,7 +90,12 @@ module.exports = {
                     .setCustomId('currency')
                     .setLabel('Currency')
                     .setStyle(page === 2 ? ButtonStyle.Primary : ButtonStyle.Secondary)
-                    .setDisabled(page === 2)
+                    .setDisabled(page === 2),
+                new ButtonBuilder()
+                    .setCustomId('boosts')
+                    .setLabel('Boosts')
+                    .setStyle(page === 3 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                    .setDisabled(page === 3),
             );
         }
 
@@ -97,6 +113,7 @@ module.exports = {
             if (interaction.customId === 'gems') page = 0;
             if (interaction.customId === 'frames') page = 1;
             if (interaction.customId === 'currency') page = 2;
+            if (interaction.customId === 'boosts') page = 3;
             await interaction.update({
                 embeds: [getEmbed(page)],
                 components: [getRow(page)]

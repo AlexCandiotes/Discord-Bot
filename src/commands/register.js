@@ -15,8 +15,8 @@ module.exports = {
 
         await pool.execute(
             `INSERT INTO user_inventory 
-            (user_id, coins, hearts, N_gems, R_gems, SR_gems, UR_gems, LR_gems, frames, private_inventory, private_collection)
-            VALUES (?, 0, 0, 0, 0, 0, 0, 0, '[]', 0, 0)`,
+            (user_id, coins, essence, sphere, N_gems, R_gems, SR_gems, UR_gems, LR_gems, frames, private_inventory, private_collection)
+            VALUES (?, 0, 0, 0, 0, 0, 0, 0, 0, '[]', 0, 0)`,
             [message.author.id]
         );
 

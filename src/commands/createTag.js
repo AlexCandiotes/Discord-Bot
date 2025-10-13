@@ -3,7 +3,6 @@ module.exports = {
     name: 'createTag',
     description: 'Create a tag for your cards.',
     async execute(message, args) {
-        // args: [tagName, emoji]
         if (args.length < 2) return message.channel.send('Usage: createtag <tagName> <emoji>');
 
         const tagName = args[0];
@@ -15,8 +14,17 @@ module.exports = {
             return message.channel.send('Please use a standard Discord emoji (not a custom emoji).');
         }
 
+        // Check if tag already exists for this user
+        const [rows] = await pool.execute(
+            'SELECT 1 FROM user_tags WHERE user_id = ? AND tag_name = ?',
+            [message.author.id, tagName]
+        );
+        if (rows.length) {
+            return message.channel.send(`You already have a tag named "${tagName}".`);
+        }
+
         await pool.execute(
-            'INSERT IGNORE INTO user_tags (user_id, tag_name, emoji) VALUES (?, ?, ?)',
+            'INSERT INTO user_tags (user_id, tag_name, emoji) VALUES (?, ?, ?)',
             [message.author.id, tagName, emoji]
         );
         message.channel.send(`Tag "${tagName}" ${emoji} created!`);

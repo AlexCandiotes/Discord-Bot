@@ -151,7 +151,7 @@ module.exports = {
                         new EmbedBuilder()
                             .setTitle('Mass Burn Complete')
                             .setDescription(
-                                `Burned cards: [${cardsToBurn.map(c => c.code).join(', ')}]\nYou received ${totalCoins} coins.`
+                                `Cards Burned: ${cardsToBurn.length}\nYou received ${totalCoins} coins.`
                             )
                             .setColor(0x2ecc71)
                     ],

@@ -18,7 +18,8 @@ module.exports = {
             startIdx = 2;
         }
 
-        let coins, N_gems, R_gems, SR_gems, UR_gems, LR_gems, hearts, frames;
+        let coins, N_gems, R_gems, SR_gems, UR_gems, LR_gems, frames;
+        let sphere, essence, half_cooldown_until, extra_drop_until, extra_drop_count;
         for (let i = startIdx; i < args.length; i += 2) {
             const key = args[i]?.toLowerCase();
             const value = args[i + 1];
@@ -29,13 +30,18 @@ module.exports = {
             if (key === 'sr_gems') SR_gems = parseInt(value);
             if (key === 'ur_gems') UR_gems = parseInt(value);
             if (key === 'lr_gems') LR_gems = parseInt(value);
-            if (key === 'hearts') hearts = parseInt(value);
             if (key === 'frames') frames = value.split(',').map(f => f.trim()).filter(f => f);
+            if (key === 'sphere') sphere = parseInt(value);
+            if (key === 'essence') essence = parseInt(value);
+            if (key === 'half_cooldown_until') half_cooldown_until = parseInt(value);
+            if (key === 'extra_drop_until') extra_drop_until = parseInt(value);
+            if (key === 'extra_drop_count') extra_drop_count = parseInt(value);
         }
 
         const [rows] = await pool.execute('SELECT * FROM user_inventory WHERE user_id = ?', [user.id]);
         let inv = rows[0] || {
-            user_id: user.id, coins: 0, N_gems: 0, R_gems: 0, SR_gems: 0, UR_gems: 0, LR_gems: 0, hearts: 0, frames: '[]'
+            user_id: user.id, coins: 0, N_gems: 0, R_gems: 0, SR_gems: 0, UR_gems: 0, LR_gems: 0,
+            frames: '[]', sphere: 0, essence: 0, half_cooldown_until: 0, extra_drop_until: 0, extra_drop_count: 0
         };
 
         if (mode === 'add') {
@@ -45,7 +51,11 @@ module.exports = {
             if (SR_gems !== undefined) inv.SR_gems += SR_gems;
             if (UR_gems !== undefined) inv.UR_gems += UR_gems;
             if (LR_gems !== undefined) inv.LR_gems += LR_gems;
-            if (hearts !== undefined) inv.hearts += hearts;
+            if (sphere !== undefined) inv.sphere += sphere;
+            if (essence !== undefined) inv.essence += essence;
+            if (half_cooldown_until !== undefined) inv.half_cooldown_until += half_cooldown_until;
+            if (extra_drop_until !== undefined) inv.extra_drop_until += extra_drop_until;
+            if (extra_drop_count !== undefined) inv.extra_drop_count += extra_drop_count;
             if (frames !== undefined) {
                 let currentFrames = [];
                 try { currentFrames = JSON.parse(inv.frames); } catch { currentFrames = []; }
@@ -58,13 +68,22 @@ module.exports = {
             if (SR_gems !== undefined) inv.SR_gems = SR_gems;
             if (UR_gems !== undefined) inv.UR_gems = UR_gems;
             if (LR_gems !== undefined) inv.LR_gems = LR_gems;
-            if (hearts !== undefined) inv.hearts = hearts;
+            if (sphere !== undefined) inv.sphere = sphere;
+            if (essence !== undefined) inv.essence = essence;
+            if (half_cooldown_until !== undefined) inv.half_cooldown_until = half_cooldown_until;
+            if (extra_drop_until !== undefined) inv.extra_drop_until = extra_drop_until;
+            if (extra_drop_count !== undefined) inv.extra_drop_count = extra_drop_count;
             if (frames !== undefined) inv.frames = JSON.stringify(frames);
         }
 
         await pool.execute(
-            'REPLACE INTO user_inventory (user_id, coins, N_gems, R_gems, SR_gems, UR_gems, LR_gems, hearts, frames) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [user.id, inv.coins, inv.N_gems, inv.R_gems, inv.SR_gems, inv.UR_gems, inv.LR_gems, inv.hearts, inv.frames]
+            `REPLACE INTO user_inventory 
+            (user_id, coins, N_gems, R_gems, SR_gems, UR_gems, LR_gems, frames, sphere, essence, half_cooldown_until, extra_drop_until, extra_drop_count) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                user.id, inv.coins, inv.N_gems, inv.R_gems, inv.SR_gems, inv.UR_gems, inv.LR_gems,
+                inv.frames, inv.sphere, inv.essence, inv.half_cooldown_until, inv.extra_drop_until, inv.extra_drop_count
+            ]
         );
 
         message.reply(`Inventory updated for <@${user.id}>.`);

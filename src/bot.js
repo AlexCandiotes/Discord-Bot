@@ -28,6 +28,8 @@ const characterLookup = require('./commands/characterLookup');
 const ban = require('./commands/ban');
 const giveCards = require('./commands/giveCards');
 const massBurn = require('./commands/massBurn');
+const shop = require('./commands/shop');
+const buy = require('./commands/buy');
 
 const client = new Client({
     intents: [
@@ -355,6 +357,15 @@ client.on('messageCreate', async message => {
     if (commandName === 'massburn' || commandName === 'mb') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
         await massBurn.execute(message, args);
+        return;
+    }
+    if (commandName === 'shop') {
+        await shop.execute(message);
+        return;
+    }
+    if (commandName === 'buy') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await buy.execute(message, args);
         return;
     }
 
