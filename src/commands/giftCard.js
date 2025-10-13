@@ -20,11 +20,10 @@ module.exports = {
 
         const card = rows[0];
 
-        // Show card embed
         const embed = new EmbedBuilder()
             .setTitle(`A gift from ${message.author.username}`)
             .setDescription(`Would you like to accept this gift ${recipient}?`)
-            .setImage(card.image)
+            .setImage(card.card_image)
             .setColor(0x2ecc71);
 
         const row = new ActionRowBuilder().addComponents(
@@ -44,7 +43,6 @@ module.exports = {
 
         const sentMsg = await message.channel.send({ embeds: [embed], components: [row] });
 
-        // Only recipient or sender can interact
         const filter = i =>
             i.user.id === recipient.id || i.user.id === message.author.id;
         const collector = sentMsg.createMessageComponentCollector({ filter, time: 60000 });

@@ -5,7 +5,6 @@ module.exports = {
     name: 'inventory',
     description: 'Show your inventory with pages for gems, frames, coins/hearts',
     async execute(message, args) {
-        // Parse user: mention or user ID, fallback to self
         let user = message.mentions.users.first();
         if (!user && args[0] && /^\d{17,19}$/.test(args[0])) {
             try {
@@ -22,7 +21,6 @@ module.exports = {
         }
         const inv = rows[0];
 
-        // Privacy check
         if (user.id !== message.author.id && inv.private_inventory) {
             return message.channel.send('This user\'s inventory is private.');
         }

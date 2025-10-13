@@ -8,6 +8,7 @@ const dropCard = require('./commands/dropCard');
 const viewDroppedCards = require('./commands/viewDroppedCards');
 const viewCard = require('./commands/viewCard');
 const tag = require('./commands/tag');
+const taglist = require('./commands/taglist');
 const createTag = require('./commands/createTag');
 const burnCard = require('./commands/burnCard');
 const giftCard = require('./commands/giftCard');
@@ -24,6 +25,9 @@ const lookup = require('./commands/lookup');
 const trade = require('./commands/trade');
 const addCard = require('./commands/addCard');
 const characterLookup = require('./commands/characterLookup');
+const ban = require('./commands/ban');
+const giveCards = require('./commands/giveCards');
+const massBurn = require('./commands/massBurn');
 
 const client = new Client({
     intents: [
@@ -89,6 +93,9 @@ client.once('ready', () => {
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
+    const [banRows] = await pool.execute('SELECT 1 FROM banned_users WHERE user_id = ?', [message.author.id]);
+    if (banRows.length) return; // Ignore or send a message if banned
+
     const prefix = getPrefix(message.guild?.id);
 
     // Only process messages that start with the prefix
@@ -134,13 +141,33 @@ client.on('messageCreate', async message => {
         return message.channel.send(`Prefix set to \`${newPrefix}\``);
     }
 
+    if (commandName === 'inventoryprivacy') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await inventoryPrivacy.execute(message, args);
+        return;
+    }
+    if (commandName === 'collectionprivacy') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await collectionPrivacy.execute(message, args);
+        return;
+    }
+
     // --- Only log for giftcard and trade commands ---
 
     // Gift card (aliases: giftcard, g)
-    if (commandName === 'giftcard' || commandName === 'g') {
+   if (commandName === 'giftcard' || commandName === 'g') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
         const replyMsg = await giftCard.execute(message, args);
-        if (logChannel && replyMsg) {
+
+        // Only log if the command was successful (replyMsg is an object with an embed or content)
+        if (
+            logChannel &&
+            replyMsg &&
+            (
+                (replyMsg.embeds && replyMsg.embeds.length > 0) ||
+                (typeof replyMsg.content === 'string' && replyMsg.content.trim() !== '')
+            )
+        ) {
             let botReplyText = replyMsg.content;
             if ((!botReplyText || botReplyText === '') && replyMsg.embeds && replyMsg.embeds.length > 0) {
                 const embed = replyMsg.embeds[0];
@@ -162,7 +189,12 @@ client.on('messageCreate', async message => {
             ).catch(() => {});
         }
         return;
-    }    
+    }
+    if (commandName === 'givecards') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await giveCards.execute(message, args);
+        return;
+    }
     // Add card (admin only)
     if (commandName === 'addcard') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
@@ -180,7 +212,14 @@ client.on('messageCreate', async message => {
     if (commandName.startsWith('add')) {
         const args = ['add', ...commandBody.slice(commandName.length).trim().split(/ +/)];
         const replyMsg = await trade.execute(message, args);
-        if (logChannel && replyMsg) {
+        if (
+            logChannel &&
+            replyMsg &&
+            (
+                (replyMsg.embeds && replyMsg.embeds.length > 0) ||
+                (typeof replyMsg.content === 'string' && replyMsg.content.trim() !== '')
+            )
+        ) {
             let botReplyText = replyMsg.content;
             if ((!botReplyText || botReplyText === '') && replyMsg.embeds && replyMsg.embeds.length > 0) {
                 const embed = replyMsg.embeds[0];
@@ -206,7 +245,14 @@ client.on('messageCreate', async message => {
     if (commandName === 'trade' || commandName === 't') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
         const replyMsg = await trade.execute(message, args);
-        if (logChannel && replyMsg) {
+        if (
+            logChannel &&
+            replyMsg &&
+            (
+                (replyMsg.embeds && replyMsg.embeds.length > 0) ||
+                (typeof replyMsg.content === 'string' && replyMsg.content.trim() !== '')
+            )
+        ) {
             let botReplyText = replyMsg.content;
             if ((!botReplyText || botReplyText === '') && replyMsg.embeds && replyMsg.embeds.length > 0) {
                 const embed = replyMsg.embeds[0];
@@ -247,9 +293,8 @@ client.on('messageCreate', async message => {
         await dropCard.execute(message, args);
         return;
     }
-    if (commandName === 'droptimer' || commandName === 'cooldown' || commandName === 'cd') {
-        const args = commandBody.slice(commandName.length).trim().split(/ +/);
-        await dropCard.droptimer.execute(message, args);
+    if (commandName === 'cooldown' || commandName === 'cd') {
+        await dropCard.droptimer(message);
         return;
     }
     if (commandName === 'view' || commandName === 'v') {
@@ -257,7 +302,7 @@ client.on('messageCreate', async message => {
         await viewCard.execute(message, args);
         return;
     }
-    if (commandName === 'tag' || commandName === 't') {
+    if (commandName === 'tag') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
         await tag.execute(message, args);
         return;
@@ -265,6 +310,11 @@ client.on('messageCreate', async message => {
     if (commandName === 'createtag' || commandName === 'ct') {
         const args = commandBody.slice(commandName.length).trim().split(/ +/);
         await createTag.execute(message, args);
+        return;
+    }
+    if (commandName === 'taglist' || commandName === 'tl') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await taglist.execute(message, args);
         return;
     }
     if (commandName === 'burncard' || commandName === 'b') {
@@ -292,6 +342,22 @@ client.on('messageCreate', async message => {
         await characterLookup.execute(message, args);
         return;
     }
+    if (commandName === 'ban') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await ban.execute(message, args);
+        return;
+    }
+    if (commandName === 'help') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await help.execute(message, args);
+        return;
+    }
+    if (commandName === 'massburn' || commandName === 'mb') {
+        const args = commandBody.slice(commandName.length).trim().split(/ +/);
+        await massBurn.execute(message, args);
+        return;
+    }
+
 });
 
 client.login(process.env.BOT_TOKEN);

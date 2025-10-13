@@ -1,7 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const pool = require('../utils/mysql');
 
-// In-memory cache for pagination (per user, per channel)
 const paginationCache = {};
 
 function getPage(cards, page, pageSize) {
@@ -34,7 +33,6 @@ module.exports = {
 
         const search = args.join(' ');
 
-        // Search both name and series
         const sql = 'SELECT * FROM cards WHERE name LIKE ? OR series LIKE ?';
         const params = [`%${search}%`, `%${search}%`];
 
@@ -44,12 +42,10 @@ module.exports = {
             return message.reply('No cards found.');
         }
 
-        // Pagination setup
         const pageSize = 10;
         let page = 0;
         const total = rows.length;
 
-        // Store in cache for this user/channel
         const cacheKey = `lookup_${message.channel.id}_${message.author.id}`;
         paginationCache[cacheKey] = {
             cards: rows,
@@ -58,10 +54,8 @@ module.exports = {
             searchValue: search
         };
 
-        // Build first embed
         const embed = buildEmbed(rows, page, pageSize, total, 'search', search);
 
-        // Buttons
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('lookup_prev_page')
@@ -77,7 +71,6 @@ module.exports = {
 
         const sentMsg = await message.channel.send({ embeds: [embed], components: [row] });
 
-        // Collector for button interactions
         const collector = sentMsg.createMessageComponentCollector({
             filter: i => i.user.id === message.author.id,
             time: 120000
@@ -93,7 +86,6 @@ module.exports = {
                 if ((cache.page + 1) * cache.pageSize < cache.cards.length) cache.page++;
             }
 
-            // Update embed and buttons
             const newEmbed = buildEmbed(cache.cards, cache.page, cache.pageSize, cache.cards.length, 'search', cache.searchValue);
             const newRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()

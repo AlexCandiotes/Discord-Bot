@@ -1,10 +1,16 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const pool = require('../utils/mysql');
 
-// In-memory cache for pagination (per user, per channel)
 const paginationCache = {};
 
-function buildEmbed(card, index, total, maxPrint) {
+async function buildEmbed(card, index, total) {
+    
+    const [printRows] = await pool.execute(
+        'SELECT MAX(print_number) AS maxPrint FROM prints WHERE card_id = ?',
+        [card.id]
+    );
+    const maxPrint = printRows[0].maxPrint ?? 0;
+
     return new EmbedBuilder()
         .setTitle(`Character Lookup:`)
         .setDescription(
@@ -30,39 +36,23 @@ module.exports = {
 
         const search = args.join(' ').trim();
 
-        // If search is a number, treat as ID, else as name
         let cardRows;
         if (/^\d+$/.test(search)) {
-            // Lookup by numeric ID
             [cardRows] = await pool.execute('SELECT * FROM cards WHERE id = ?', [search]);
         } else {
-            // Lookup by name (may return multiple cards/images)
-            [cardRows] = await pool.execute('SELECT * FROM cards WHERE name LIKE ?', [search]);
+            [cardRows] = await pool.execute('SELECT * FROM cards WHERE name LIKE ?', [`%${search}%`]);
         }
 
         if (!cardRows.length) {
             return message.reply('No character found.');
         }
 
-        // Get the highest print number for this character
-        let maxPrint = null;
-        if (cardRows.length > 0) {
-            const name = cardRows[0].name;
-            const [printRows] = await pool.execute(
-                'SELECT MAX(print_number) AS maxPrint FROM prints p JOIN cards c ON p.card_id = c.id WHERE c.name = ?',
-                [name]
-            );
-            maxPrint = printRows[0].maxPrint ?? 0;
-        }
-
-        // If only one card, show info without buttons
         if (cardRows.length === 1) {
             const card = cardRows[0];
-            const embed = buildEmbed(card, 0, 1, maxPrint);
+            const embed = await buildEmbed(card, 0, 1);
             return message.channel.send({ embeds: [embed] });
         }
 
-        // Multiple cards/images: show with pagination buttons
         let page = 0;
         const total = cardRows.length;
         const cacheKey = `charlookup_${message.channel.id}_${message.author.id}_${Date.now()}`;
@@ -71,7 +61,7 @@ module.exports = {
             page
         };
 
-        const embed = buildEmbed(cardRows[page], page, total, maxPrint);
+        const embed = await buildEmbed(cardRows[page], page, total);
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -103,7 +93,7 @@ module.exports = {
                 if (cache.page < cache.cards.length - 1) cache.page++;
             }
 
-            const newEmbed = buildEmbed(cache.cards[cache.page], cache.page, cache.cards.length, maxPrint);
+            const newEmbed = await buildEmbed(cache.cards[cache.page], cache.page, cache.cards.length);
             const newRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('charlookup_prev')

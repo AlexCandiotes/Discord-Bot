@@ -1,58 +1,85 @@
 const { createCanvas, loadImage } = require('canvas');
 
-/**
- * Draws a card image with the character name in the bottom box and print number in the top-left box.
- * @param {string} cardImageUrl - The URL of the character/card image.
- * @param {string} characterName - The character's name to display.
- * @param {string|number} printNumber - The print number to display.
- * @returns {Promise<Buffer>} - The image buffer.
- */
 async function drawCard(cardImageUrl, characterName, printNumber) {
-    const width = 300, height = 400;
+    const width = 225, height = 350;
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
 
-    // Draw card border/frame
-    ctx.strokeStyle = 'red';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(0, 0, width, height);
-
-    // Draw main card image area (with padding)
-    const imgArea = { x: 10, y: 10, w: width - 20, h: height - 80 };
     try {
         const cardImg = await loadImage(cardImageUrl);
-        ctx.drawImage(cardImg, imgArea.x, imgArea.y, imgArea.w, imgArea.h);
+        ctx.drawImage(cardImg, 0, 0, width, height);
     } catch (e) {
-        // If image fails to load, fill with gray
         ctx.fillStyle = '#888';
-        ctx.fillRect(imgArea.x, imgArea.y, imgArea.w, imgArea.h);
+        ctx.fillRect(0, 0, width, height);
     }
 
-    // Draw bottom box for character name
-    ctx.fillStyle = '#fff8dc';
-    ctx.fillRect(0, height - 60, width, 60);
-    ctx.strokeStyle = 'red';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, height - 60, width, 60);
+    const printBoxW = 44, printBoxH = 32;
+    ctx.fillStyle = 'rgba(255,255,255,0)';
+    ctx.fillRect(0, 0, printBoxW, printBoxH);
 
-    ctx.font = 'bold 28px Arial';
-    ctx.fillStyle = '#222';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(characterName, width / 2, height - 30);
-
-    // Draw top-left box for print number
-    ctx.fillStyle = '#fff8dc';
-    ctx.fillRect(0, 0, 70, 40);
-    ctx.strokeStyle = 'red';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, 70, 40);
-
-    ctx.font = 'bold 24px Arial';
-    ctx.fillStyle = '#222';
+    ctx.font = 'bold 20px Arial';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(printNumber, 10, 20);
+
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#000';
+    ctx.strokeText(printNumber, 10, printBoxH / 2);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(printNumber, 10, printBoxH / 2);
+
+    let fontSize = 28;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    function wrapText(text, maxWidth) {
+        let words = text.split(' ');
+        let lines = [];
+        let line = '';
+        for (let i = 0; i < words.length; i++) {
+            let testLine = line ? line + ' ' + words[i] : words[i];
+            ctx.font = `bold ${fontSize}px Arial`;
+            let testWidth = ctx.measureText(testLine).width;
+            if (testWidth > maxWidth && line) {
+                lines.push(line);
+                line = words[i];
+            } else {
+                line = testLine;
+            }
+        }
+        lines.push(line);
+        return lines;
+    }
+    let lines = wrapText(characterName, width - 20);
+    while (lines.length > 2 && fontSize > 14) {
+        fontSize -= 2;
+        lines = wrapText(characterName, width - 20);
+    }
+
+    if (lines.length > 2) {
+        lines = lines.slice(0, 2);
+        let last = lines[1];
+        while (ctx.measureText(last + '...').width > width - 20 && last.length > 0) {
+            last = last.slice(0, -1);
+        }
+        lines[1] = last + '...';
+    }
+
+    const lineHeight = fontSize + 4;
+    const nameBoxHeight = lineHeight * lines.length + 8;
+    ctx.fillStyle = 'rgba(255,255,255,0)';
+    ctx.fillRect(0, height - nameBoxHeight, width, nameBoxHeight);
+
+    ctx.font = `bold ${fontSize}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#000';
+    ctx.fillStyle = '#fff';
+    for (let i = 0; i < lines.length; i++) {
+        const y = height - nameBoxHeight + lineHeight / 2 + i * lineHeight;
+        ctx.strokeText(lines[i], width / 2, y);
+        ctx.fillText(lines[i], width / 2, y);
+    }
 
     return canvas.toBuffer();
 }

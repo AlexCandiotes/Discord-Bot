@@ -1,6 +1,6 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, userMention } = require('discord.js');
 const pool = require('../utils/mysql');
-const activeTrades = {}; // In-memory trade sessions
+const activeTrades = {};
 
 function getTrade(userId) {
     return activeTrades[userId];
@@ -48,7 +48,6 @@ module.exports = {
         const userId = message.author.id;
         const mention = message.mentions.users.first();
 
-        // Start a trade with accept/reject buttons (only mentioned user can accept/reject)
         if (mention && (!args[0] || args[0] === `<@${mention.id}>` || args[0] === `<@!${mention.id}>`)) {
             if (getTrade(userId) || getTrade(mention.id)) {
                 return message.reply('One of you is already in a trade.');
@@ -92,7 +91,6 @@ module.exports = {
                     await interaction.reply({ content: 'You have accepted the trade. Both users can now add items and proceed.', ephemeral: true });
                     await tradeStartMsg.edit({ content: '✅ Trade accepted! Both users can now add items and proceed.', components: [] });
 
-                    // Show the initial trade box (empty offers) WITH LOCK BUTTON
                     const userA = await message.client.users.fetch(userId);
                     const userB = await message.client.users.fetch(mention.id);
 
@@ -108,14 +106,12 @@ module.exports = {
                             .setStyle(ButtonStyle.Secondary)
                     );
 
-                    // Send the trade box and store its message ID
                     const tradeBoxMsg = await message.channel.send({
                         content: `🔄 ${userMention(userId)} and ${userMention(mention.id)}, add items if you wish, then lock your offer with 🔒.`,
                         embeds: [embed],
                         components: [row]
                     });
 
-                    // Store the trade box message ID in both trade sessions
                     const tradeA = getTrade(userId);
                     const tradeB = getTrade(mention.id);
                     tradeA.tradeBoxMsgId = tradeBoxMsg.id;
@@ -123,7 +119,6 @@ module.exports = {
                     setTrade(userId, tradeA);
                     setTrade(mention.id, tradeB);
 
-                    // Start the lock/confirm collector immediately
                     const locked = { [userId]: false, [mention.id]: false };
                     const ready = { [userId]: false, [mention.id]: false };
 
@@ -144,12 +139,10 @@ module.exports = {
                             locked[interaction.user.id] = true;
                             await interaction.reply({ content: 'You have locked your offer.', ephemeral: true });
 
-                            // Update embed to show lock status
                             let updatedEmbed = tradeBoxEmbed(userA, tradeA.offer, userB, tradeB.offer)
                                 .setTitle('Trade Offer')
                                 .setDescription('🔒 Lock your offer when ready. Both users must lock to confirm.');
 
-                            // If both locked, show tick button
                             if (locked[userId] && locked[mention.id]) {
                                 row = new ActionRowBuilder().addComponents(
                                     new ButtonBuilder()
@@ -202,7 +195,7 @@ module.exports = {
 
                     lockCollector.on('end', async (collected, reason) => {
                         if (reason === 'completed') {
-                            // Execute trade logic here (move cards, gems, etc.)
+
                             const tradeA = getTrade(userId);
                             const tradeB = getTrade(mention.id);
                             // Cards
@@ -284,7 +277,6 @@ module.exports = {
             return;
         }
 
-        // Allow both "add" and "sadd" as the command
         if (args[0] === 'add' || args[0] === 'sadd') {
             const trade = getTrade(userId);
             if (!trade) return message.reply('You are not in a trade.');
@@ -303,10 +295,9 @@ module.exports = {
                 trade.offer.cards.push(code);
                 setTrade(userId, trade);
             }
-            // Gems: support both "r gem 1" and "r 1"
             else if (
                 (itemType.length === 1 && ['n', 'r', 's', 'u', 'l'].includes(itemType)) || // "r"
-                itemType.endsWith('gem') // "r gem"
+                itemType.endsWith('gem')
             ) {
                 let rarity, amount;
                 if (itemType.endsWith('gem')) {
@@ -349,7 +340,6 @@ module.exports = {
                 return message.reply('Unknown item type.');
             }
 
-            // Edit the existing trade box message instead of sending a new one
             const userA = await message.client.users.fetch(userId);
             const userB = await message.client.users.fetch(trade.with);
             const tradeA = getTrade(userId);
@@ -362,7 +352,6 @@ module.exports = {
                         embeds: [tradeBoxEmbed(userA, tradeA.offer, userB, tradeB ? tradeB.offer : { cards: [], gems: {}, coins: 0, hearts: 0, frames: [] })]
                     });
                 } catch (e) {
-                    // fallback: send a new one if not found
                     const newMsg = await channel.send({
                         embeds: [tradeBoxEmbed(userA, tradeA.offer, userB, tradeB ? tradeB.offer : { cards: [], gems: {}, coins: 0, hearts: 0, frames: [] })]
                     });
@@ -376,7 +365,6 @@ module.exports = {
             return message.reply('Item added to your trade offer.');
         }
 
-        // Cancel trade
         if (args[0] === 'cancel') {
             const trade = getTrade(userId);
             if (!trade) return message.reply('You are not in a trade.');
@@ -384,7 +372,6 @@ module.exports = {
             return message.channel.send('Trade cancelled.');
         }
 
-        // Show trade status
         if (args[0] === 'status') {
             const trade = getTrade(userId);
             if (!trade) return message.reply('You are not in a trade.');

@@ -1,17 +1,16 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const drawCard = require('../utils/drawCard');
-const path = require('path');
 const pool = require('../utils/mysql');
 
 const rarityRates = { N: 50, R: 30, SR: 15 };
 const rarityImages = {
-    N: path.join(__dirname, '../../images/gems/N_gem.png'),
-    R: path.join(__dirname, '../../images/gems/R_gem.png'),
-    SR: path.join(__dirname, '../../images/gems/SR_gem.png'),
-    // UR: path.join(__dirname, '../../images/gems/UR_gem.png'),
+    N: 'images/gems/N_gem.png',
+    R: 'images/gems/R_gem.png',
+    SR: 'images/gems/SR_gem.png',
 };
-const gemAnimationGif = path.join(__dirname, '../../images/gems/gem.gif');
+const gemAnimationGif = 'images/gems/gem.gif';
 const DROP_INTERVAL = 10 * 60 * 1000;
+const cardUploadChannelId = '1423702746728632320';
 
 function getRandomRarity() {
     const rand = Math.random() * 100;
@@ -117,22 +116,25 @@ module.exports = {
                     const nextPrint = (result[0].max_print || 0) + 1;
                     const code = generateCode();
 
-                    await pool.execute(
-                        'INSERT INTO prints (user_id, card_id, print_number, code) VALUES (?, ?, ?, ?)',
-                        [message.author.id, droppedCard.id, nextPrint, code]
-                    );
-
-                    // Draw the card image with the new layout
                     const buffer = await drawCard(droppedCard.image, droppedCard.name, nextPrint);
-                    const attachment = new AttachmentBuilder(buffer, { name: 'card.png' });
+
+                    const cardUploadChannel = await interaction.client.channels.fetch(cardUploadChannelId);
+                    const attachment = new AttachmentBuilder(buffer, { name: `${code}.png` });
+                    const uploadMsg = await cardUploadChannel.send({ files: [attachment] });
+                    const cardImageUrl = uploadMsg.attachments.first().url;
+
+                    await pool.execute(
+                        'INSERT INTO prints (user_id, card_id, print_number, code, card_image) VALUES (?, ?, ?, ?, ?)',
+                        [message.author.id, droppedCard.id, nextPrint, code, cardImageUrl]
+                    );
 
                     const resultEmbed = new EmbedBuilder()
                         .setTitle(`${message.author.username} opened the gem!`)
-                        .setDescription(`**${droppedCard.name}** from **${droppedCard.series}**\nPrint: #${nextPrint}\nCode: ${code}`)
-                        .setImage('attachment://card.png')
+                        .setDescription(`**Name:** ${droppedCard.name}\n**Series:** ${droppedCard.series}\n**Rarity:** ${rarity}\n**Print:** #${nextPrint}\n**Code:** ${code}`)
+                        .setImage(cardImageUrl)
                         .setColor(0xB39DDB);
 
-                    await interaction.update({ embeds: [resultEmbed], files: [attachment], components: [] });
+                    await interaction.update({ embeds: [resultEmbed], files: [], components: [] });
                 } else if (interaction.customId === 'store_gem') {
                     const column = `${rarity}_gems`;
                     await pool.execute(
@@ -158,6 +160,7 @@ module.exports = {
     },
 
     async droptimer(message) {
+        const { EmbedBuilder } = require('discord.js');
         const userId = message.author.id;
         const now = Date.now();
 
@@ -167,14 +170,23 @@ module.exports = {
         );
         const lastDrop = rows.length ? Number(rows[0].last_drop) : null;
 
+        let embed;
         if (!lastDrop || now - lastDrop >= DROP_INTERVAL) {
-            return message.channel.send('✅ You can drop a card now!');
+            embed = new EmbedBuilder()
+                .setTitle('Drop Timer')
+                .setDescription('✅ You can drop a card now!')
+                .setColor(0x42A5F5);
         } else {
             const nextDropTimestamp = Math.floor((lastDrop + DROP_INTERVAL) / 1000);
-            return message.channel.send(
-                `You must wait ${Math.ceil((DROP_INTERVAL - (now - lastDrop)) / 60000)} minutes to drop again, <@${userId}>.`
-            );
+            const minutes = Math.ceil((DROP_INTERVAL - (now - lastDrop)) / 60000);
+            embed = new EmbedBuilder()
+                .setTitle('Drop Timer')
+                .setDescription(
+                    `⏳ You must wait **${minutes} minute${minutes !== 1 ? 's' : ''}** to drop again, <@${userId}>.\n(<t:${nextDropTimestamp}:R>)`
+                )
+                .setColor(0xB39DDB);
         }
+        return message.channel.send({ embeds: [embed] });
     },
 
     DROP_INTERVAL

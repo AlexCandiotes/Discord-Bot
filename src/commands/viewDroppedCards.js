@@ -8,7 +8,6 @@ const rarityIcons = {
     default: '⬜'
 };
 
-// In-memory cache for pagination (per user, per channel)
 const paginationCache = {};
 
 function getPage(cards, page, pageSize) {
@@ -36,7 +35,6 @@ module.exports = {
     async execute(message) {
         const args = message.content.split(' ');
 
-        // --- User parsing: mention, user ID, or self ---
         let user = message.mentions.users.first();
         if (!user && args[1] && /^\d{17,19}$/.test(args[1])) {
             try {
@@ -49,7 +47,6 @@ module.exports = {
         const targetUserId = user.id;
         const targetUserTag = user.tag;
 
-        // Privacy check
         const [invRows] = await pool.execute('SELECT private_collection FROM user_inventory WHERE user_id = ?', [targetUserId]);
         if (targetUserId !== message.author.id && invRows.length && invRows[0].private_collection) {
             return message.channel.send('This user\'s collection is private.');
@@ -114,12 +111,10 @@ module.exports = {
             return message.channel.send('No cards found with that filter.');
         }
 
-        // Pagination setup
         const pageSize = 10;
         let page = 0;
         const total = rows.length;
 
-        // Store in cache for this user/channel
         const cacheKey = `${message.channel.id}_${message.author.id}`;
         paginationCache[cacheKey] = {
             cards: rows,
@@ -129,10 +124,8 @@ module.exports = {
             userTag: targetUserTag
         };
 
-        // Build first embed
         const embed = buildEmbed(rows, page, pageSize, total, targetUserId, targetUserTag);
 
-        // Buttons
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('prev_page')
@@ -148,7 +141,6 @@ module.exports = {
 
         const sentMsg = await message.channel.send({ embeds: [embed], components: [row] });
 
-        // Collector for button interactions
         const collector = sentMsg.createMessageComponentCollector({
             filter: i => i.user.id === message.author.id,
             time: 120000
@@ -164,7 +156,6 @@ module.exports = {
                 if ((cache.page + 1) * cache.pageSize < cache.cards.length) cache.page++;
             }
 
-            // Update embed and buttons
             const newEmbed = buildEmbed(cache.cards, cache.page, cache.pageSize, cache.cards.length, cache.userId, cache.userTag);
             const newRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()

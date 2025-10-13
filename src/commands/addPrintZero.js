@@ -4,7 +4,6 @@ module.exports = {
     name: 'addprintzero',
     description: 'Admin: Add a print 0 card to a user. Usage: addprintzero <user_id> <card_id>',
     async execute(message, args) {
-        // Admin check
         if (message.author.id !== '941763497623187518') {
             return message.reply('Only the bot owner can use this command.');
         }
@@ -16,7 +15,6 @@ module.exports = {
             return message.reply('Usage: addprintzero <user_id> <card_id>');
         }
 
-        // Generate a random 6-character code
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
         await pool.execute(

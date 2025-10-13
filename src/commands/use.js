@@ -20,7 +20,6 @@ module.exports = {
         }
         const { column, rarity, label } = gemMap[gemType];
 
-        // Check if user has the gem
         const [rows] = await pool.execute(
             `SELECT ${column} FROM user_inventory WHERE user_id = ?`,
             [message.author.id]
@@ -29,7 +28,6 @@ module.exports = {
             return message.reply(`You do not have any ${label}s to use.`);
         }
 
-        // Get a random card of the correct rarity
         const [cards] = await pool.execute(
             'SELECT * FROM cards WHERE rarity = ? ORDER BY RAND() LIMIT 1',
             [rarity]
@@ -39,13 +37,11 @@ module.exports = {
         }
         const card = cards[0];
 
-        // Decrement gem count
         await pool.execute(
             `UPDATE user_inventory SET ${column} = ${column} - 1 WHERE user_id = ?`,
             [message.author.id]
         );
 
-        // Add card to user's prints
         const [result] = await pool.execute(
             'SELECT MAX(print_number) AS max_print FROM prints WHERE card_id = ?',
             [card.id]
@@ -58,7 +54,6 @@ module.exports = {
             [message.author.id, card.id, nextPrint, code]
         );
 
-        // Show result
         const embed = new EmbedBuilder()
             .setTitle(`You used a ${label}!`)
             .setDescription(`You received **${card.name}** from **${card.series}**!\nPrint: #${nextPrint}\nCode: \`${code}\``)
